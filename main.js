@@ -2330,6 +2330,7 @@ var DEFAULT_SETTINGS = {
   fontFamily: "me_quran",
   fontSize: "24px",
   offlineMode: false,
+  autoCreateNotes: true,
   searchArabicEdition: false
 };
 var QuranSearchModal = class extends import_obsidian.SuggestModal {
@@ -2849,6 +2850,28 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
     console.log("Layout is ready. Initializing Surah data...");
     await this.initializeSurahData();
   }
+  async createQuranNote(noteName, content) {
+    const folderPath = "Quran";
+    const filePath = `${folderPath}/${noteName}.md`;
+    
+    // Create the Quran folder if it doesn't exist
+    if (!await this.app.vault.adapter.exists(folderPath)) {
+      await this.app.vault.createFolder(folderPath);
+    }
+    
+    // Check if note already exists
+    const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+    
+    if (!existingFile) {
+      // Create new note
+      await this.app.vault.create(filePath, content);
+    } else {
+      // Optionally update existing note
+      // await this.app.vault.modify(existingFile, content);
+    }
+    
+    return filePath;
+  }
   async initializeSurahData() {
     var _a, _b;
     try {
@@ -2945,6 +2968,7 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
     const surah = verse.split(":")[0];
     const ayah = parseInt(verse.split(":")[1]) - 1;
     let result = "";
+    let createNoteResult = "";
     if (this.settings.offlineMode) {
       const arabicData = await this.getOfflineVerse(parseInt(surah), ayah + 1, "ar.quran-simple");
       let translationData = null;
@@ -2957,7 +2981,7 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
         const surahName = translationData ? translationData.data.englishName : arabicData.data.name;
         const surahNumber = arabicData.data.number;
         const ayahNumber = arabicData.data.ayahs[0].numberInSurah;
-        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}-${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -2973,7 +2997,7 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
           result += "> [!" + calloutType + "]+ " + verseHeader + "\n";
           if (translationData) {
             const enText = this.handleParens(translationData.data.ayahs[0].text, this.settings.removeParens);
-            result += "> " + enText + "\n> " + arText + "\n>";
+            result += "> " + arText + "\n> " + enText + "\n>";
           } else {
             result += "> " + arText + "\n>";
           }
@@ -2989,6 +3013,15 @@ ${arText}
             result += arText + "\n";
           }
         }
+
+        const calloutType = this.settings.calloutType || "tip";
+        createNoteResult += "> [!" + calloutType + "]+ " + `${surahName} (${surahNumber}:${ayahNumber})` + "\n";
+        if (translationData) {
+          const enText = this.handleParens(translationData.data.ayahs[0].text, this.settings.removeParens);
+          createNoteResult += "> " + arText + "\n> " + enText + "\n>\n\n";
+        } else {
+          createNoteResult += "> " + arText + "\n>\n\n";
+        }
       }
     } else {
       const urlArabic = this.resolveAPIurl(surah, "ar.quran-simple", ayah);
@@ -3001,7 +3034,7 @@ ${arText}
         const surahName = english.data.englishName;
         const surahNumber = english.data.number;
         const ayahNumber = english.data.ayahs[0].numberInSurah;
-        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}-${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -3009,19 +3042,23 @@ ${arText}
           result += "| " + enText + " | " + arText + " |\n";
         } else if (this.settings.displayTypeIndex === 2) {
           const calloutType = this.settings.calloutType || "tip";
-          result += "> [!" + calloutType + "]+ " + verseHeader + "\n> " + enText + "\n> " + arText + "\n>";
+          result += "> [!" + calloutType + "]+ " + verseHeader + "\n> " + arText + "\n> " + enText + "\n>";
         } else {
           result += `${verseHeader}
 ${enText}
 ` + arText + "\n";
         }
+
+        const calloutType = this.settings.calloutType || "tip";
+        createNoteResult += "> [!" + calloutType + "]+ " + `${surahName} (${surahNumber}:${ayahNumber})` + "\n> " + arText + "\n> " + enText + "\n>\n\n";
+
       } else {
         const arabic = await this.fetchArabicOnly(urlArabic);
         const arText = this.applyArabicStyle(arabic.data.ayahs[0].text, this.settings.arabicStyleIndex);
         const surahName = arabic.data.name;
         const surahNumber = arabic.data.number;
         const ayahNumber = arabic.data.ayahs[0].numberInSurah;
-        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}-${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |
 | ---- |
@@ -3035,8 +3072,19 @@ ${enText}
           result += `${verseHeader}
 ` + arText + "\n";
         }
+
+        const calloutType = this.settings.calloutType || "tip";
+        createNoteResult += `> [!${calloutType}]+ ${surahName} (${surahNumber}:${ayahNumber})
+> ` + arText + "\n>\n\n";
       }
+
     }
+
+    if (this.settings.autoCreateNotes) {
+      const noteName = `Quran ${surah}-${ayah + 1}`;
+      await this.createQuranNote(noteName, createNoteResult);
+    }
+
     return result;
   }
   async getAyahRange(verse) {
@@ -3056,7 +3104,17 @@ ${enText}
       if (arabicData) {
         const surahName = translationData ? translationData.data.englishName : arabicData.data.name;
         const surahNumber = arabicData.data.number;
-        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahRangeText}|${surahNumber}:${ayahRangeText}]])`;
+
+        let verseHeader = `${surahName} (`;
+        for (let ayahNum = startAyah+1; ayahNum <= endAyah; ayahNum) {
+          verseHeader += `[[Quran ${surahNumber}-${ayahNum}|${surahNumber}:${ayahNum}]]`;
+          ayahNum++;
+          if (ayahNum <= endAyah) {
+            verseHeader += " | ";
+          }
+        }
+        verseHeader += `)`;
+
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -3078,7 +3136,7 @@ ${enText}
             const arText = this.applyArabicStyle(arabicData.data.ayahs[i].text, this.settings.arabicStyleIndex);
             if (translationData) {
               const enText = this.handleParens(translationData.data.ayahs[i].text, this.settings.removeParens);
-              result += "> " + enText + "\n> " + arText + "\n>\n";
+              result += "> " + arText + "\n> " + enText + "\n>\n";
             } else {
               result += "> " + arText + "\n>\n";
             }
@@ -3110,7 +3168,17 @@ ${arText}
         const [arabic, english] = await this.fetchArabicAndTranslation(urlArabic, urlEnglish);
         const surahName = english.data.englishName;
         const surahNumber = english.data.number;
-        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahRangeText}|${surahNumber}:${ayahRangeText}]])`;
+
+        let verseHeader = `${surahName} (`;
+        for (let ayahNum = startAyah+1; ayahNum <= endAyah; ayahNum) {
+          verseHeader += `[[Quran ${surahNumber}-${ayahNum}|${surahNumber}:${ayahNum}]]`;
+          ayahNum++;
+          if (ayahNum <= endAyah) {
+            verseHeader += " | ";
+          }
+        }
+        verseHeader += `)`;
+
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -3127,8 +3195,8 @@ ${arText}
           for (let i = 0; i < arabic.data.ayahs.length; i++) {
             const arText = this.applyArabicStyle(arabic.data.ayahs[i].text, this.settings.arabicStyleIndex);
             const enText = this.handleParens(english.data.ayahs[i].text, this.settings.removeParens);
-            result += `> ${enText}
-> ` + arText + "\n>\n";
+            result += "> " + arText + `
+> > ${enText} \n>\n`;
           }
           result = result.trim();
         } else {
@@ -3146,7 +3214,17 @@ ${arText}
         const arabic = await this.fetchArabicOnly(urlArabic);
         const surahName = arabic.data.name;
         const surahNumber = arabic.data.number;
-        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahRangeText}|${surahNumber}:${ayahRangeText}]])`;
+
+        let verseHeader = `${surahName} (`;
+        for (let ayahNum = startAyah+1; ayahNum <= endAyah; ayahNum) {
+          verseHeader += `[[Quran ${surahNumber}-${ayahNum}|${surahNumber}:${ayahNum}]]`;
+          ayahNum++;
+          if (ayahNum <= endAyah) {
+            verseHeader += " | ";
+          }
+        }
+        verseHeader += `)`;
+
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |
 | ---- |
@@ -3175,6 +3253,22 @@ ${arText}
         }
       }
     }
+
+    if (this.settings.autoCreateNotes) {
+
+      const startAyah = parseInt(ayahRangeText.split("-")[0]);
+      const endAyah = parseInt(ayahRangeText.split("-")[1]);
+      
+      // Create individual notes for each ayah in the range
+      for (let ayahNum = startAyah; ayahNum <= endAyah; ayahNum++) {
+        const individualVerse = `${surah}:${ayahNum}`;
+        const ayahContent = await this.getAyah(individualVerse);
+
+        const noteName = `Quran ${surah}-${ayahNum}`;
+        await this.createQuranNote(noteName, ayahContent);
+      }
+    }
+
     return result;
   }
   async fetchWithRetry(url, retries = 3) {
@@ -3474,6 +3568,15 @@ var QuranLookupSettingTab = class extends import_obsidian.PluginSettingTab {
         this.display();
       });
     });
+    new import_obsidian.Setting(containerEl)
+      .setName('Auto-create verse notes')
+      .setDesc('Automatically create notes in Quran folder when retrieving verses')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.autoCreateNotes)
+        .onChange(async (value) => {
+          this.plugin.settings.autoCreateNotes = value;
+          await this.plugin.saveSettings();
+    }));
     if (this.plugin.settings.includeTranslation) {
       new import_obsidian.Setting(containerEl).setName("Translator Language").setDesc("Select the language for translation").addDropdown((dropdown) => {
         const languages = Object.keys(Translations);
