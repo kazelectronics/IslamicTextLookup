@@ -1,10 +1,10 @@
 {
-	"id": "obsidian-quran-lookup",
-	"name": "Quran Lookup",
+	"id": "obsidian-Islamic-Text-Lookup",
+	"name": "Islamic Text Lookup",
 	"version": "0.3.1",
 	"minAppVersion": "0.14.0",
-	"description": "This is a Quran Lookup plugin for Obsidian. This replaces chapter:verse shorthand with verse text in arabic and translation.",
-	"author": "AbuIbrahim2",
-	"authorUrl": "https://github.com/abuibrahim2/quranlookup",
+	"description": "This is a Islamic Text Lookup plugin for Obsidian.",
+	"author": "Kazimali Khaki",
+	"authorUrl": "https://github.com/kazelectronics/IslamicTextLookup",
 	"isDesktopOnly": false
 }
