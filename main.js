@@ -2957,7 +2957,7 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
         const surahName = translationData ? translationData.data.englishName : arabicData.data.name;
         const surahNumber = arabicData.data.number;
         const ayahNumber = arabicData.data.ayahs[0].numberInSurah;
-        const verseHeader = `${surahName} (${surahNumber}:${ayahNumber})`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -3001,7 +3001,7 @@ ${arText}
         const surahName = english.data.englishName;
         const surahNumber = english.data.number;
         const ayahNumber = english.data.ayahs[0].numberInSurah;
-        const verseHeader = `${surahName} (${surahNumber}:${ayahNumber})`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -3021,7 +3021,7 @@ ${enText}
         const surahName = arabic.data.name;
         const surahNumber = arabic.data.number;
         const ayahNumber = arabic.data.ayahs[0].numberInSurah;
-        const verseHeader = `${surahName} (${surahNumber}:${ayahNumber})`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahNumber}|${surahNumber}:${ayahNumber}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |
 | ---- |
@@ -3056,7 +3056,7 @@ ${enText}
       if (arabicData) {
         const surahName = translationData ? translationData.data.englishName : arabicData.data.name;
         const surahNumber = arabicData.data.number;
-        const verseHeader = `${surahName} (${surahNumber}:${ayahRangeText})`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahRangeText}|${surahNumber}:${ayahRangeText}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -3110,7 +3110,7 @@ ${arText}
         const [arabic, english] = await this.fetchArabicAndTranslation(urlArabic, urlEnglish);
         const surahName = english.data.englishName;
         const surahNumber = english.data.number;
-        const verseHeader = `${surahName} (${surahNumber}:${ayahRangeText})`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahRangeText}|${surahNumber}:${ayahRangeText}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |  |
 | ---- | ---- |
@@ -3146,7 +3146,7 @@ ${arText}
         const arabic = await this.fetchArabicOnly(urlArabic);
         const surahName = arabic.data.name;
         const surahNumber = arabic.data.number;
-        const verseHeader = `${surahName} (${surahNumber}:${ayahRangeText})`;
+        const verseHeader = `${surahName} ([[Quran ${surahNumber}:${ayahRangeText}|${surahNumber}:${ayahRangeText}]])`;
         if (this.settings.displayTypeIndex === 1) {
           result += `| ${verseHeader} |
 | ---- |
@@ -3466,7 +3466,7 @@ var QuranLookupSettingTab = class extends import_obsidian.PluginSettingTab {
     var _a, _b;
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Quran Lookup Settings" });
+    containerEl.createEl("h2", { text: "Islamic Text Lookup Settings" });
     new import_obsidian.Setting(containerEl).setName("Include Translation").setDesc("If true, provides translation under the Arabic verse").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.includeTranslation).onChange(async (includeTranslation) => {
         this.plugin.settings.includeTranslation = includeTranslation;
