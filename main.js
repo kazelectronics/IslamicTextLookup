@@ -2868,41 +2868,11 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
       }
       const controlsContainer = createEl("div", { cls: "search-controls-container" });
       resultsContainer2.insertAdjacentElement("beforebegin", controlsContainer);
-      const checkboxContainer = createEl("div", { cls: "search-arabic-container" });
-      controlsContainer.appendChild(checkboxContainer);
-      this.searchArabicCheckbox = checkboxContainer.createEl("input", { type: "checkbox" });
-      this.searchArabicCheckbox.checked = this.plugin.settings.searchArabicEdition;
-      const label = checkboxContainer.createEl("label");
-      label.textContent = "Search Arabic Hadith";
-      const keyboardButton = checkboxContainer.createEl("button", { cls: "keyboard-button", text: "" });
-      keyboardButton.textContent = "ar \u2328";
-      let keyboardVisible = false;
-      keyboardButton.addEventListener("click", () => {
-        keyboardVisible = !keyboardVisible;
-        if (keyboardVisible) {
-          this.keyboard.show();
-          this.keyboard.createKeyboard({
-            row2: ["\u0636", "\u0635", "\u062B", "\u0642", "\u0641", "\u063A", "\u0639", "\u0647", "\u062E", "\u062D", "\u062C", "\u062F", "\\"],
-            row3: ["\u0634", "\u0633", "\u064A", "\u0628", "\u0644", "\u0627", "\u062A", "\u0646", "\u0645", "\u0643", "\u0637"],
-            row4: ["\u0626", "\u0621", "\u0624", "\u0631", "\u0644\u0627", "\u0649", "\u0629", "\u0648", "\u0632", "\u0638"],
-            shiftRow2: ["\u064E", "\u064B", "\u064F", "\u064C", "\u0644\u0625", "\u0625", "'", "\xF7", "\xD7", "\u061B", "<", ">", "|"],
-            shiftRow3: ["\u0650", "\u064D", "]", "[", "\u0644\u0623", "\u0623", "\u0640", "\u060C", "/", ":"],
-            shiftRow4: ["~", "\u0652", "{", "}", "\u0644\u0622", "\u0622", "\u0651", ",", ".", "\u0630"]
-          });
-          this.inputEl.focus();
-        } else {
-          this.keyboard.hide();
-        }
-      });
       const searchButton = createEl("button", {
         cls: "mod-cta",
         text: "Search"
       });
       controlsContainer.appendChild(searchButton);
-      this.searchArabicCheckbox.addEventListener("change", (e) => {
-        this.plugin.settings.searchArabicEdition = this.searchArabicCheckbox.checked;
-        this.plugin.saveSettings();
-      });
       searchButton.addEventListener("click", async () => {
         await this.performSearch();
       });
@@ -2981,6 +2951,14 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
       ]);
       
       if (results.length === 0) {
+        console.error(`no matches found`);
+        new import_obsidian.Notice("No matches found");
+        this.searchResults = [];
+        this.updatePaginationDisplay();
+        return;
+      }
+
+      if (results[0].error == "No matches found") {
         console.error(`no matches found`);
         new import_obsidian.Notice("No matches found");
         this.searchResults = [];
@@ -3310,8 +3288,6 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
 
     let result = "";
     let createNoteResult = "";
-
-    const translationData = match.englishText;
 
     const arText = this.applyArabicStyle(match.arabicText, this.settings.arabicStyleIndex);
     const bookName = match.book;
