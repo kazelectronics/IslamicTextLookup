@@ -719,7 +719,7 @@ var require_surahSlim = __commonJS({
 // main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => QuranLookupPlugin
+  default: () => IslamicTextLookupPlugin
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
@@ -2787,7 +2787,320 @@ async function rateLimit(promises, batchSize = 3, delayMs = 500) {
   }
   return results;
 }
-var QuranLookupPlugin = class extends import_obsidian.Plugin {
+
+var HadithSearchModal = class extends import_obsidian.SuggestModal {
+  constructor(app, plugin, editor) {
+    super(app);
+    this.searchResults = [];
+    this.suggestions = [];
+    this.currentPage = 1;
+    this.resultsPerPage = 10;
+    this.totalPages = 1;
+    this.fetchedBook= /* @__PURE__ */ new Set();
+    this.fetchedChapter= /* @__PURE__ */ new Set();
+    this.fetchedAuthor= /* @__PURE__ */ new Set();
+    this.fetchedTranslator= /* @__PURE__ */ new Set();
+    this.fetchedArabicHadith= /* @__PURE__ */ new Set();
+    this.fetchedEnglishHadith= /* @__PURE__ */ new Set();
+    this.plugin = plugin;
+    this.editor = editor;
+    this.setPlaceholder("Enter text to search for in the Arabic or Translation...");
+    const footerEl = this.modalEl.createDiv({ cls: "search-results-footer" });
+    const controlsContainer = this.modalEl.createDiv({ cls: "search-controls-container" });
+    const checkboxContainer = controlsContainer.createDiv({ cls: "search-arabic-container" });
+    const keyboardContainer = this.modalEl.createDiv();
+    keyboardContainer.style.position = "absolute";
+    keyboardContainer.style.backgroundColor = "var(--background-primary)";
+    keyboardContainer.style.border = "1px solid var(--background-modifier-border)";
+    keyboardContainer.style.borderRadius = "6px";
+    keyboardContainer.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+    keyboardContainer.style.zIndex = "1000";
+    keyboardContainer.style.left = "50%";
+    keyboardContainer.style.transform = "translateX(-50%)";
+    keyboardContainer.style.width = "90%";
+    keyboardContainer.style.maxWidth = "600px";
+    keyboardContainer.style.display = "none";
+    this.keyboard = new DraggableKeyboard(keyboardContainer, (key) => {
+      var _a, _b;
+      const textarea = this.inputEl;
+      const start = (_a = textarea.selectionStart) != null ? _a : textarea.value.length;
+      const end = (_b = textarea.selectionEnd) != null ? _b : textarea.value.length;
+      const content = textarea.value;
+      if (key === "Backspace") {
+        if (start > 0) {
+          textarea.value = content.substring(0, start - 1) + content.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start - 1;
+        }
+      } else {
+        textarea.value = content.substring(0, start) + key + content.substring(end);
+        textarea.selectionStart = textarea.selectionEnd = start + key.length;
+      }
+      textarea.focus();
+    });
+    const paginationControlsEl = footerEl.createDiv({ cls: "pagination-controls" });
+    this.paginationEl = paginationControlsEl.createDiv("search-pagination");
+    this.paginationEl.style.display = "flex";
+    this.paginationEl.style.justifyContent = "center";
+    this.paginationEl.style.gap = "10px";
+    this.paginationEl.style.marginTop = "10px";
+    this.paginationEl.style.width = "100%";
+    const prevButton = this.paginationEl.createEl("button", { text: "Previous" });
+    const pageInfo = this.paginationEl.createSpan();
+    const nextButton = this.paginationEl.createEl("button", { text: "Next" });
+    prevButton.onclick = () => this.changePage(this.currentPage - 1);
+    nextButton.onclick = () => this.changePage(this.currentPage + 1);
+    const paginationInfo = footerEl.createSpan({ cls: "pagination-info" });
+    this.updatePaginationInfo(pageInfo, prevButton, nextButton);
+  }
+  onOpen() {
+    super.onOpen();
+    const { contentEl } = this;
+    const headerEl = contentEl.createDiv({ cls: "search-results-header" });
+    const countEl = headerEl.createSpan({ cls: "search-results-count" });
+    this.updateSearchCount(countEl);
+    const resultsContainer = contentEl.createDiv();
+    resultsContainer.style.margin = "8px";
+    setTimeout(() => {
+      const resultsContainer2 = this.modalEl.querySelector(".prompt-results");
+      if (!resultsContainer2) {
+        console.error("Results container not found");
+        return;
+      }
+      const controlsContainer = createEl("div", { cls: "search-controls-container" });
+      resultsContainer2.insertAdjacentElement("beforebegin", controlsContainer);
+      const checkboxContainer = createEl("div", { cls: "search-arabic-container" });
+      controlsContainer.appendChild(checkboxContainer);
+      this.searchArabicCheckbox = checkboxContainer.createEl("input", { type: "checkbox" });
+      this.searchArabicCheckbox.checked = this.plugin.settings.searchArabicEdition;
+      const label = checkboxContainer.createEl("label");
+      label.textContent = "Search Arabic Hadith";
+      const keyboardButton = checkboxContainer.createEl("button", { cls: "keyboard-button", text: "" });
+      keyboardButton.textContent = "ar \u2328";
+      let keyboardVisible = false;
+      keyboardButton.addEventListener("click", () => {
+        keyboardVisible = !keyboardVisible;
+        if (keyboardVisible) {
+          this.keyboard.show();
+          this.keyboard.createKeyboard({
+            row2: ["\u0636", "\u0635", "\u062B", "\u0642", "\u0641", "\u063A", "\u0639", "\u0647", "\u062E", "\u062D", "\u062C", "\u062F", "\\"],
+            row3: ["\u0634", "\u0633", "\u064A", "\u0628", "\u0644", "\u0627", "\u062A", "\u0646", "\u0645", "\u0643", "\u0637"],
+            row4: ["\u0626", "\u0621", "\u0624", "\u0631", "\u0644\u0627", "\u0649", "\u0629", "\u0648", "\u0632", "\u0638"],
+            shiftRow2: ["\u064E", "\u064B", "\u064F", "\u064C", "\u0644\u0625", "\u0625", "'", "\xF7", "\xD7", "\u061B", "<", ">", "|"],
+            shiftRow3: ["\u0650", "\u064D", "]", "[", "\u0644\u0623", "\u0623", "\u0640", "\u060C", "/", ":"],
+            shiftRow4: ["~", "\u0652", "{", "}", "\u0644\u0622", "\u0622", "\u0651", ",", ".", "\u0630"]
+          });
+          this.inputEl.focus();
+        } else {
+          this.keyboard.hide();
+        }
+      });
+      const searchButton = createEl("button", {
+        cls: "mod-cta",
+        text: "Search"
+      });
+      controlsContainer.appendChild(searchButton);
+      this.searchArabicCheckbox.addEventListener("change", (e) => {
+        this.plugin.settings.searchArabicEdition = this.searchArabicCheckbox.checked;
+        this.plugin.saveSettings();
+      });
+      searchButton.addEventListener("click", async () => {
+        await this.performSearch();
+      });
+      this.inputEl.addEventListener("keydown", async (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          await this.performSearch();
+        }
+      });
+    }, 50);
+  }
+  onClose() {
+    if (this.keyboard) {
+      this.keyboard.destroy();
+    }
+  }
+  updateSearchCount(countEl) {
+    const count = this.searchResults.length;
+    countEl.setText(`${count} Search Results`);
+  }
+  updatePaginationDisplay() {
+    const pageInfo = this.paginationEl.querySelector("span");
+    const buttons = Array.from(this.paginationEl.querySelectorAll("button"));
+    const [prevButton, nextButton] = buttons;
+    if (pageInfo && prevButton && nextButton) {
+      this.updatePaginationInfo(pageInfo, prevButton, nextButton);
+      this.refreshSuggestions();
+    }
+  }
+  updatePaginationInfo(pageInfo, prevButton, nextButton) {
+    const totalResults = this.searchResults.length;
+    this.totalPages = Math.ceil(totalResults / this.resultsPerPage);
+    pageInfo.setText(`Page ${this.currentPage} of ${this.totalPages}`);
+    const footerEl = this.modalEl.querySelector(".search-results-footer");
+    if (footerEl) {
+      const paginationInfo = footerEl.querySelector(".pagination-info");
+      if (paginationInfo) {
+        const start = (this.currentPage - 1) * this.resultsPerPage + 1;
+        const end = Math.min(this.currentPage * this.resultsPerPage, totalResults);
+        paginationInfo.setText(`${start}-${end} of ${totalResults} Search Results`);
+      }
+    }
+    prevButton.disabled = this.currentPage === 1;
+    nextButton.disabled = this.currentPage === this.totalPages || this.totalPages === 0;
+  }
+  changePage(newPage) {
+    if (newPage >= 1 && newPage <= this.totalPages) {
+      this.currentPage = newPage;
+      this.updatePaginationDisplay();
+      if (!this.plugin.settings.searchArabicEdition) {
+        this.fetchArabicVersesForCurrentPage();
+      } else {
+        this.fetchTranslationVersesForCurrentPage();
+      }
+    }
+  }
+  async performSearch() {
+    var _a, _b, _c;
+    const query = this.inputEl.value;
+    if (query.length < 3) {
+      new import_obsidian.Notice("Please enter at least 3 characters to search");
+      return;
+    }
+    try {
+      new import_obsidian.Notice("Searching...");
+      this.fetchedBook.clear();
+      this.fetchedChapter.clear();
+      this.fetchedAuthor.clear();
+      this.fetchedTranslator.clear();
+      this.fetchedArabicHadith.clear();
+      this.fetchedEnglishHadith.clear();
+      
+      console.log("API Performing online translation search...");
+      const results = await Promise.all([
+        fetch(`https://www.thaqalayn-api.net/api/v2/query?q=${encodeURIComponent(query)}`).then((res) => res.json()).catch((error) => ({ code: 500, error: error.message }))
+      ]);
+      
+      if (results.length === 0) {
+        console.error(`no matches found`);
+        new import_obsidian.Notice("No matches found");
+        this.searchResults = [];
+        this.updatePaginationDisplay();
+        return;
+      }
+
+      this.searchResults = results[0];
+
+      this.searchResults.forEach((result) => {
+        console.log(`fetched result`);
+        var _a2;
+        if (((_a2 = result.data) == null ? void 0 : _a2.code) === 200) {
+          result.match.arabicText = result.match.text;
+          result.match.text = result.data.data.text;
+          this.fetchedArabicHadith.add(result.arabicText);
+          this.fetchedEnglishHadith.add(result.englishText);
+          this.fetchedBook.add(result.book);
+          this.fetchedChapter.add(result.chapter);
+          this.fetchedAuthor.add(result.author);
+          this.fetchedTranslator.add(result.translator);
+          console.log(`fetched result okay`);
+        } else if (result.error) {
+          console.error(`Error fetching `);
+        }
+      });
+
+      this.refreshSuggestions();
+     
+      this.updatePaginationDisplay();
+      new import_obsidian.Notice(`Found ${this.searchResults.length} matches`);
+    } catch (error) {
+      new import_obsidian.Notice("Error searching Hadith: " + error.message);
+      console.error("Search error:", error);
+    }
+    this.refreshSuggestions();
+  }
+  getSuggestions(query) {
+    if (!query) {
+      this.searchResults = [];
+      this.suggestions = [];
+      this.fetchedBook.clear();
+      this.fetchedChapter.clear();
+      this.fetchedAuthor.clear();
+      this.fetchedTranslator.clear();
+      this.fetchedArabicHadith.clear();
+      this.fetchedEnglishHadith.clear();
+      
+      this.currentPage = 1;
+      return [];
+    }
+    const startIdx = (this.currentPage - 1) * this.resultsPerPage;
+    const endIdx = Math.min(startIdx + this.resultsPerPage, this.searchResults.length);
+    return this.searchResults.slice(startIdx, endIdx);
+  }
+  renderSuggestion(match, el) {
+    el.addClass("suggestion-item");
+    const titleEl = el.createEl("div", { cls: "suggestion-title" });
+    const surahEl = titleEl.createSpan({ cls: "surah-reference" });
+    surahEl.setText(match.book);
+    const verseRef = titleEl.createSpan({ cls: "verse-reference" });
+    verseRef.setText(` ${match.chapter}`);
+    const textEl = el.createEl("div", { cls: "suggestion-text" });
+    textEl.innerHTML = this.highlightSearchMatches(match.englishText, this.inputEl.value);
+    if (match.arabicText) {
+      const arabicEl = el.createEl("div", { cls: "quran-arabic" });
+      arabicEl.style.marginTop = "10px";
+      arabicEl.innerHTML = this.plugin.settings.searchArabicEdition ? this.highlightSearchMatches(match.arabicText, this.inputEl.value) : match.arabicText;
+    }
+    el.addEventListener("mouseover", () => {
+      const items = this.resultContainerEl.querySelectorAll(".suggestion-item");
+      const index = Array.from(items).indexOf(el);
+      if (index >= 0) {
+        this.setSelectedItem(index, true);
+      }
+    });
+  }
+  highlightSearchMatches(text, query) {
+    if (!query)
+      return text;
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escapedQuery})`, "gi");
+    return text.replace(regex, '<span style="color: #60a5fa; font-weight: bold;">$1</span>');
+  }
+  refreshSuggestions() {
+    const query = this.inputEl.value.trim();
+    if (!query) {
+      this.searchResults = [];
+      this.suggestions = [];
+      this.fetchedBook.clear();
+      this.fetchedChapter.clear();
+      this.fetchedAuthor.clear();
+      this.fetchedTranslator.clear();
+      this.fetchedArabicHadith.clear();
+      this.fetchedEnglishHadith.clear();
+      this.currentPage = 1;
+      super.updateSuggestions();
+      return;
+    }
+    this.suggestions = this.getSuggestions(query);
+    super.updateSuggestions();
+  }
+  setSelectedItem(index, scrollIntoView = false) {
+    const items = this.resultContainerEl.querySelectorAll(".suggestion-item");
+    items.forEach((item) => item.classList.remove("is-selected"));
+    if (index >= 0 && index < items.length) {
+      const selectedItem = items[index];
+      selectedItem.classList.add("is-selected");
+      if (scrollIntoView) {
+        selectedItem.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }
+  async onChooseSuggestion(match, evt) {
+    const verseContent = await this.plugin.renderHadith(match);
+    this.editor.replaceSelection(verseContent);
+  }
+};
+
+var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
     this.offlineData = {};
@@ -2838,7 +3151,14 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
         new QuranSearchModal(this.app, this, editor).open();
       }
     });
-    this.addSettingTab(new QuranLookupSettingTab(this.app, this));
+    this.addCommand({
+      id: "search-hadith",
+      name: "Search Hadith",
+      editorCallback: (editor, view) => {
+        new HadithSearchModal(this.app, this, editor).open();
+      }
+    });
+    this.addSettingTab(new IslamicTextLookupSettingTab(this.app, this));
     this.updateStyles();
   }
   onunload() {
@@ -2852,6 +3172,28 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
   }
   async createQuranNote(noteName, content) {
     const folderPath = "Quran";
+    const filePath = `${folderPath}/${noteName}.md`;
+    
+    // Create the Quran folder if it doesn't exist
+    if (!await this.app.vault.adapter.exists(folderPath)) {
+      await this.app.vault.createFolder(folderPath);
+    }
+    
+    // Check if note already exists
+    const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+    
+    if (!existingFile) {
+      // Create new note
+      await this.app.vault.create(filePath, content);
+    } else {
+      // Optionally update existing note
+      // await this.app.vault.modify(existingFile, content);
+    }
+    
+    return filePath;
+  }
+  async createHadithNote(noteName, content) {
+    const folderPath = "Hadith";
     const filePath = `${folderPath}/${noteName}.md`;
     
     // Create the Quran folder if it doesn't exist
@@ -2963,6 +3305,37 @@ var QuranLookupPlugin = class extends import_obsidian.Plugin {
     const arabic = await arabicResponse.json();
     const english = await englishResponse.json();
     return [arabic, english];
+  }
+  async renderHadith(match) {
+
+    let result = "";
+    let createNoteResult = "";
+
+    const translationData = match.englishText;
+
+    const arText = this.applyArabicStyle(match.arabicText, this.settings.arabicStyleIndex);
+    const bookName = match.book;
+    const chapterName = match.chapter;
+    const chapterID = match.chapterInCategoryId;
+    const url = match.URL;
+    const hadithID = url.split('/').pop();
+
+    const verseHeader = `[[${bookName} ${chapterID} #${hadithID}|${bookName} - ${chapterName} - Hadith ${hadithID}]]`;
+
+    const calloutType = this.settings.calloutType || "tip";
+    result += "> [!" + calloutType + "]+ " + verseHeader + "\n";
+    const enText = this.handleParens(match.englishText, this.settings.removeParens);
+    result += "> " + arText + "\n> " + enText + "\n>";
+
+    createNoteResult += "> [!" + calloutType + "]+ " + `${bookName} - ${chapterName} - Hadith ${hadithID}` + "\n";
+    createNoteResult += "> " + arText + "\n> " + enText + "\n> " + url + "\n>\n\n";
+
+    if (this.settings.autoCreateNotes) {
+      const noteName = `${bookName} ${chapterID} #${hadithID}`;
+      await this.createHadithNote(noteName, createNoteResult);
+    }
+
+    return result;
   }
   async getAyah(verse) {
     const surah = verse.split(":")[0];
@@ -3551,7 +3924,7 @@ ${arText}
     }));
   }
 };
-var QuranLookupSettingTab = class extends import_obsidian.PluginSettingTab {
+var IslamicTextLookupSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
