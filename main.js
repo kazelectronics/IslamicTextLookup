@@ -4,7 +4,7 @@ if you want to view the source, please visit the github repository of this plugi
 
 
 
-add hadith search book, name of chapter, etc
+add Thaqalayn search book, name of chapter, etc
 */
 
 var __defProp = Object.defineProperty;
@@ -2320,8 +2320,8 @@ var ArabicStyleOptions = {
   2: "Code Override (`)"
 };
 var DEFAULT_SETTINGS = {
-  translatorLanguage: "en",
-  translatorIndex: 0,
+  qurantranslatorLanguage: "en",
+  qurantranslatorIndex: 0,
   displayTypeIndex: 2,
   arabicStyleIndex: 0,
   includeTranslation: true,
@@ -2331,7 +2331,7 @@ var DEFAULT_SETTINGS = {
   calloutType: "tip",
   wrapQuranInCode: false,
   wrapQuranInSpan: false,
-  fontFamily: "me_quran",
+  fontFamily: "scheherazade",
   fontSize: "24px",
   offlineMode: false,
   autoCreateNotes: true,
@@ -2352,7 +2352,6 @@ var QuranSearchModal = class extends import_obsidian.SuggestModal {
     this.setPlaceholder("Enter text to search for in the Quran or Translation...");
     const footerEl = this.modalEl.createDiv({ cls: "search-results-footer" });
     const controlsContainer = this.modalEl.createDiv({ cls: "search-controls-container" });
-    const checkboxContainer = controlsContainer.createDiv({ cls: "search-arabic-container" });
     const keyboardContainer = this.modalEl.createDiv();
     keyboardContainer.style.position = "absolute";
     keyboardContainer.style.backgroundColor = "var(--background-primary)";
@@ -2512,7 +2511,7 @@ var QuranSearchModal = class extends import_obsidian.SuggestModal {
     return await this.plugin.searchOfflineArabic(query);
   }
   async performTranslationOfflineSearch(query) {
-    const edition = Translations[this.plugin.settings.translatorLanguage][this.plugin.settings.translatorIndex].identifier;
+    const edition = Translations[this.plugin.settings.qurantranslatorLanguage][this.plugin.settings.qurantranslatorIndex].identifier;
     const offlineData = this.plugin.offlineData[edition];
     if (!offlineData) {
       throw new Error(`No offline data available for edition: ${edition}`);
@@ -2555,7 +2554,7 @@ var QuranSearchModal = class extends import_obsidian.SuggestModal {
           return;
         }
       } else {
-        const edition = this.plugin.settings.searchArabicEdition ? "ar.quran-simple" : Translations[this.plugin.settings.translatorLanguage][this.plugin.settings.translatorIndex].identifier;
+        const edition = this.plugin.settings.searchArabicEdition ? "ar.quran-simple" : Translations[this.plugin.settings.qurantranslatorLanguage][this.plugin.settings.qurantranslatorIndex].identifier;
         const hasOfflineData = (_c = this.plugin.offlineData) == null ? void 0 : _c[edition];
         if (hasOfflineData) {
           try {
@@ -2667,7 +2666,7 @@ var QuranSearchModal = class extends import_obsidian.SuggestModal {
       if (unfetchedResults.length === 0) {
         return;
       }
-      const edition = Translations[this.plugin.settings.translatorLanguage][this.plugin.settings.translatorIndex].identifier;
+      const edition = Translations[this.plugin.settings.qurantranslatorLanguage][this.plugin.settings.qurantranslatorIndex].identifier;
       const offlineMode = this.plugin.settings.offlineMode && ((_a = this.plugin.offlineData) == null ? void 0 : _a[edition]);
       if (offlineMode) {
         console.log("Offline mode enabled. Fetching translation verses for current page from local data...");
@@ -2792,7 +2791,7 @@ async function rateLimit(promises, batchSize = 3, delayMs = 500) {
   return results;
 }
 
-var HadithSearchModal = class extends import_obsidian.SuggestModal {
+var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
   constructor(app, plugin, editor) {
     super(app);
     this.searchResults = [];
@@ -2804,8 +2803,8 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
     this.fetchedChapter= /* @__PURE__ */ new Set();
     this.fetchedAuthor= /* @__PURE__ */ new Set();
     this.fetchedTranslator= /* @__PURE__ */ new Set();
-    this.fetchedArabicHadith= /* @__PURE__ */ new Set();
-    this.fetchedEnglishHadith= /* @__PURE__ */ new Set();
+    this.fetchedArabic= /* @__PURE__ */ new Set();
+    this.fetchedEnglish= /* @__PURE__ */ new Set();
     this.plugin = plugin;
     this.editor = editor;
     this.setPlaceholder("Enter text to search for in the Arabic or Translation...");
@@ -2946,8 +2945,8 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
       this.fetchedChapter.clear();
       this.fetchedAuthor.clear();
       this.fetchedTranslator.clear();
-      this.fetchedArabicHadith.clear();
-      this.fetchedEnglishHadith.clear();
+      this.fetchedArabic.clear();
+      this.fetchedEnglish.clear();
       
       console.log("API Performing online translation search...");
       const results = await Promise.all([
@@ -2978,8 +2977,8 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
         if (((_a2 = result.data) == null ? void 0 : _a2.code) === 200) {
           result.match.arabicText = result.match.text;
           result.match.text = result.data.data.text;
-          this.fetchedArabicHadith.add(result.arabicText);
-          this.fetchedEnglishHadith.add(result.englishText);
+          this.fetchedArabic.add(result.arabicText);
+          this.fetchedEnglish.add(result.englishText);
           this.fetchedBook.add(result.book);
           this.fetchedChapter.add(result.chapter);
           this.fetchedAuthor.add(result.author);
@@ -2995,7 +2994,7 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
       this.updatePaginationDisplay();
       new import_obsidian.Notice(`Found ${this.searchResults.length} matches`);
     } catch (error) {
-      new import_obsidian.Notice("Error searching Hadith: " + error.message);
+      new import_obsidian.Notice("Error searching: " + error.message);
       console.error("Search error:", error);
     }
     this.refreshSuggestions();
@@ -3008,8 +3007,8 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
       this.fetchedChapter.clear();
       this.fetchedAuthor.clear();
       this.fetchedTranslator.clear();
-      this.fetchedArabicHadith.clear();
-      this.fetchedEnglishHadith.clear();
+      this.fetchedArabic.clear();
+      this.fetchedEnglish.clear();
       
       this.currentPage = 1;
       return [];
@@ -3056,8 +3055,8 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
       this.fetchedChapter.clear();
       this.fetchedAuthor.clear();
       this.fetchedTranslator.clear();
-      this.fetchedArabicHadith.clear();
-      this.fetchedEnglishHadith.clear();
+      this.fetchedArabic.clear();
+      this.fetchedEnglish.clear();
       this.currentPage = 1;
       super.updateSuggestions();
       return;
@@ -3077,7 +3076,7 @@ var HadithSearchModal = class extends import_obsidian.SuggestModal {
     }
   }
   async onChooseSuggestion(match, evt) {
-    const verseContent = await this.plugin.renderHadith(match);
+    const verseContent = await this.plugin.renderThaqalayn(match);
     this.editor.replaceSelection(verseContent);
   }
 };
@@ -3134,10 +3133,10 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
       }
     });
     this.addCommand({
-      id: "search-hadith",
-      name: "Search Hadith",
+      id: "search-thaqalayn",
+      name: "Search Thaqalayn",
       editorCallback: (editor, view) => {
-        new HadithSearchModal(this.app, this, editor).open();
+        new ThaqalaynSearchModal(this.app, this, editor).open();
       }
     });
     this.addSettingTab(new IslamicTextLookupSettingTab(this.app, this));
@@ -3174,7 +3173,7 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
     
     return filePath;
   }
-  async createHadithNote(noteName, content) {
+  async createThaqalaynNote(noteName, content) {
     const folderPath = "Hadith";
     const filePath = `${folderPath}/${noteName}.md`;
     
@@ -3288,7 +3287,7 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
     const english = await englishResponse.json();
     return [arabic, english];
   }
-  async renderHadith(match) {
+  async renderThaqalayn(match) {
 
     let result = "";
     let createNoteResult = "";
@@ -3298,21 +3297,21 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
     const chapterName = match.chapter;
     const chapterID = match.chapterInCategoryId;
     const url = match.URL;
-    const hadithID = url.split('/').pop();
+    const hID = url.split('/').pop();
 
-    const verseHeader = `[[${bookName} ${chapterID} ${hadithID}#User Notes|${bookName} - ${chapterName} - Hadith ${hadithID}]]`;
+    const verseHeader = `[[${bookName} ${chapterID} ${hID}#User Notes|${bookName} - ${chapterName} - Hadith ${hID}]]`;
 
     const calloutType = this.settings.calloutType || "tip";
     result += "> [!" + calloutType + "]+ " + verseHeader + "\n";
     const enText = this.handleParens(match.englishText, this.settings.removeParens);
     result += "> " + arText + "\n> " + enText + "\n>";
 
-    createNoteResult += `# ${bookName}\n## ${chapterName} \n### Hadith \#${hadithID} \n\n`;
+    createNoteResult += `# ${bookName}\n## ${chapterName} \n### Hadith \#${hID} \n\n`;
     createNoteResult += arText + "\n\n" + match.englishText + "\n\n[Source](" + url + ")\n\n### User Notes\n\n";
 
     if (this.settings.autoCreateNotes) {
-      const noteName = `${bookName} ${chapterID} ${hadithID}`;
-      await this.createHadithNote(noteName, createNoteResult);
+      const noteName = `${bookName} ${chapterID} ${hID}`;
+      await this.createThaqalaynNote(noteName, createNoteResult);
     }
 
     return result;
@@ -3326,7 +3325,7 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
       const arabicData = await this.getOfflineVerse(parseInt(surah), ayah + 1, "ar.quran-simple");
       let translationData = null;
       if (this.settings.includeTranslation) {
-        const translationEdition = Translations[this.settings.translatorLanguage][this.settings.translatorIndex].identifier;
+        const translationEdition = Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].identifier;
         translationData = await this.getOfflineVerse(parseInt(surah), ayah + 1, translationEdition);
       }
       if (arabicData) {
@@ -3378,7 +3377,7 @@ ${arText}
     } else {
       const urlArabic = this.resolveAPIurl(surah, "ar.quran-simple", ayah);
       if (this.settings.includeTranslation) {
-        const translator = Translations[this.settings.translatorLanguage][this.settings.translatorIndex].identifier;
+        const translator = Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].identifier;
         const urlEnglish = this.resolveAPIurl(surah, translator, ayah);
         const [arabic, english] = await this.fetchArabicAndTranslation(urlArabic, urlEnglish);
         const arText = this.applyArabicStyle(arabic.data.ayahs[0].text, this.settings.arabicStyleIndex);
@@ -3453,7 +3452,7 @@ ${enText}
       const arabicData = await this.getOfflineVerseRange(parseInt(surah), startAyah + 1, endAyah, "ar.quran-simple");
       let translationData = null;
       if (this.settings.includeTranslation) {
-        const translationEdition = Translations[this.settings.translatorLanguage][this.settings.translatorIndex].identifier;
+        const translationEdition = Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].identifier;
         translationData = await this.getOfflineVerseRange(parseInt(surah), startAyah + 1, endAyah, translationEdition);
       }
       if (arabicData) {
@@ -3518,7 +3517,7 @@ ${arText}
     } else {
       const urlArabic = this.resolveAPIurl(surah, "ar.quran-simple", startAyah, ayahRange);
       if (this.settings.includeTranslation) {
-        const translator = Translations[this.settings.translatorLanguage][this.settings.translatorIndex].identifier;
+        const translator = Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].identifier;
         const urlEnglish = this.resolveAPIurl(surah, translator, startAyah, ayahRange);
         const [arabic, english] = await this.fetchArabicAndTranslation(urlArabic, urlEnglish);
         const surahName = english.data.englishName;
@@ -3654,7 +3653,7 @@ ${arText}
   }
   async ensureOfflineData() {
     const arabicEdition = "ar.quran-simple";
-    const translationEdition = this.settings.includeTranslation ? Translations[this.settings.translatorLanguage][this.settings.translatorIndex].identifier : null;
+    const translationEdition = this.settings.includeTranslation ? Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].identifier : null;
     try {
       const storage = await this.loadData();
       if (!storage) {
@@ -3868,7 +3867,7 @@ ${arText}
     })));
   }
   async searchOfflineTranslation(query, limit = 3e3) {
-    const translationEdition = Translations[this.settings.translatorLanguage][this.settings.translatorIndex].identifier;
+    const translationEdition = Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].identifier;
     if (!this.offlineData[translationEdition]) {
       throw new Error(`Translation edition ${translationEdition} not available offline`);
     }
@@ -3898,9 +3897,9 @@ ${arText}
       },
       edition: {
         identifier: translationEdition,
-        language: this.settings.translatorLanguage,
-        name: Translations[this.settings.translatorLanguage][this.settings.translatorIndex].name,
-        englishName: Translations[this.settings.translatorLanguage][this.settings.translatorIndex].name,
+        language: this.settings.qurantranslatorLanguage,
+        name: Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].name,
+        englishName: Translations[this.settings.qurantranslatorLanguage][this.settings.qurantranslatorIndex].name,
         type: "translation"
       }
     }));
@@ -3938,24 +3937,24 @@ var IslamicTextLookupSettingTab = class extends import_obsidian.PluginSettingTab
         languages.forEach((lang) => {
           dropdown.addOption(lang, lang.toUpperCase());
         });
-        dropdown.setValue(this.plugin.settings.translatorLanguage).onChange(async (value) => {
-          this.plugin.settings.translatorLanguage = value;
-          this.plugin.settings.translatorIndex = 0;
+        dropdown.setValue(this.plugin.settings.qurantranslatorLanguage).onChange(async (value) => {
+          this.plugin.settings.qurantranslatorLanguage = value;
+          this.plugin.settings.qurantranslatorIndex = 0;
           await this.plugin.saveSettings();
           this.display();
         });
       });
       new import_obsidian.Setting(containerEl).setName("Translation Type").setDesc("Which translation to use").addDropdown((dropdown) => {
-        const selectedLanguage = this.plugin.settings.translatorLanguage;
+        const selectedLanguage = this.plugin.settings.qurantranslatorLanguage;
         const translations = Translations[selectedLanguage];
         translations.forEach((translation, index) => {
           dropdown.addOption(index.toString(), translation.name);
         });
-        dropdown.setValue(this.plugin.settings.translatorIndex.toString()).onChange(async (value) => {
-          this.plugin.settings.translatorIndex = +value;
+        dropdown.setValue(this.plugin.settings.qurantranslatorIndex.toString()).onChange(async (value) => {
+          this.plugin.settings.qurantranslatorIndex = +value;
           await this.plugin.saveSettings();
           if (this.plugin.settings.offlineMode && this.plugin.settings.includeTranslation) {
-            const translationEdition = Translations[this.plugin.settings.translatorLanguage][+value].identifier;
+            const translationEdition = Translations[this.plugin.settings.qurantranslatorLanguage][+value].identifier;
             const existingData = await this.plugin.loadFromOfflineStorage(translationEdition);
             if (!existingData) {
               new import_obsidian.Notice("Downloading new translation for offline use...");
