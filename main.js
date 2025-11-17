@@ -2791,6 +2791,641 @@ async function rateLimit(promises, batchSize = 3, delayMs = 500) {
   return results;
 }
 
+var NoorSearchModal = class extends import_obsidian.SuggestModal {
+  constructor(app, plugin, editor) {
+    super(app);
+    this.searchResults = [];
+    this.suggestions = [];
+    this.currentPage = 1;
+    this.resultsPerPage = 10;
+    this.totalPages = 1;
+    this.hadithCount = 0;
+    this.plugin = plugin;
+    this.editor = editor;
+    this.setPlaceholder("Enter text to search for in the Arabic or Translation...");
+    const footerEl = this.modalEl.createDiv({ cls: "search-results-footer" });
+    const controlsContainer = this.modalEl.createDiv({ cls: "search-controls-container" });
+    const checkboxContainer = controlsContainer.createDiv({ cls: "search-arabic-container" });
+    const keyboardContainer = this.modalEl.createDiv();
+    keyboardContainer.style.position = "absolute";
+    keyboardContainer.style.backgroundColor = "var(--background-primary)";
+    keyboardContainer.style.border = "1px solid var(--background-modifier-border)";
+    keyboardContainer.style.borderRadius = "6px";
+    keyboardContainer.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+    keyboardContainer.style.zIndex = "1000";
+    keyboardContainer.style.left = "50%";
+    keyboardContainer.style.transform = "translateX(-50%)";
+    keyboardContainer.style.width = "90%";
+    keyboardContainer.style.maxWidth = "600px";
+    keyboardContainer.style.display = "none";
+    this.keyboard = new DraggableKeyboard(keyboardContainer, (key) => {
+      var _a, _b;
+      const textarea = this.inputEl;
+      const start = (_a = textarea.selectionStart) != null ? _a : textarea.value.length;
+      const end = (_b = textarea.selectionEnd) != null ? _b : textarea.value.length;
+      const content = textarea.value;
+      if (key === "Backspace") {
+        if (start > 0) {
+          textarea.value = content.substring(0, start - 1) + content.substring(end);
+          textarea.selectionStart = textarea.selectionEnd = start - 1;
+        }
+      } else {
+        textarea.value = content.substring(0, start) + key + content.substring(end);
+        textarea.selectionStart = textarea.selectionEnd = start + key.length;
+      }
+      textarea.focus();
+    });
+    const paginationControlsEl = footerEl.createDiv({ cls: "pagination-controls" });
+    this.paginationEl = paginationControlsEl.createDiv("search-pagination");
+    this.paginationEl.style.display = "flex";
+    this.paginationEl.style.justifyContent = "center";
+    this.paginationEl.style.gap = "10px";
+    this.paginationEl.style.marginTop = "10px";
+    this.paginationEl.style.width = "100%";
+    const prevButton = this.paginationEl.createEl("button", { text: "Previous" });
+    const pageInfo = this.paginationEl.createSpan();
+    const nextButton = this.paginationEl.createEl("button", { text: "Next" });
+    prevButton.onclick = () => this.changePage(this.currentPage - 1);
+    nextButton.onclick = () => this.changePage(this.currentPage + 1);
+    const paginationInfo = footerEl.createSpan({ cls: "pagination-info" });
+    this.updatePaginationInfo(pageInfo, prevButton, nextButton);
+  }
+  onOpen() {
+    super.onOpen();
+    const { contentEl } = this;
+    const headerEl = contentEl.createDiv({ cls: "search-results-header" });
+    const countEl = headerEl.createSpan({ cls: "search-results-count" });
+    this.updateSearchCount(countEl);
+    const resultsContainer = contentEl.createDiv();
+    resultsContainer.style.margin = "8px";
+    setTimeout(() => {
+      const resultsContainer2 = this.modalEl.querySelector(".prompt-results");
+      if (!resultsContainer2) {
+        console.error("Results container not found");
+        return;
+      }
+      const controlsContainer = createEl("div", { cls: "search-controls-container" });
+      resultsContainer2.insertAdjacentElement("beforebegin", controlsContainer);
+      const searchHadithButton = createEl("button", {
+        cls: "mod-cta",
+        text: "Search Hadith"
+      });
+      controlsContainer.appendChild(searchHadithButton);
+      searchHadithButton.addEventListener("click", async () => {
+        await this.performSearch('hadith');
+      });
+      const searchTranslateButton = createEl("button", {
+        cls: "mod-cta",
+        text: "Search Translation"
+      });
+      controlsContainer.appendChild(searchTranslateButton);
+      searchTranslateButton.addEventListener("click", async () => {
+        await this.performSearch('translate');
+      });
+      const searchExplanationButton = createEl("button", {
+        cls: "mod-cta",
+        text: "Search Sharh"
+      });
+      controlsContainer.appendChild(searchExplanationButton);
+      searchExplanationButton.addEventListener("click", async () => {
+        await this.performSearch('explanation');
+      });
+      
+    }, 50);
+  }
+  onClose() {
+    if (this.keyboard) {
+      this.keyboard.destroy();
+    }
+  }
+  updateSearchCount(countEl) {
+    const count = this.searchResults.length;
+    countEl.setText(`${count} Search Results`);
+  }
+  updatePaginationDisplay() {
+    const pageInfo = this.paginationEl.querySelector("span");
+    const buttons = Array.from(this.paginationEl.querySelectorAll("button"));
+    const [prevButton, nextButton] = buttons;
+    if (pageInfo && prevButton && nextButton) {
+      this.updatePaginationInfo(pageInfo, prevButton, nextButton);
+      this.refreshSuggestions();
+    }
+  }
+  updatePaginationInfo(pageInfo, prevButton, nextButton) {
+      
+    this.totalPages = Math.ceil(this.hadithCount / this.resultsPerPage);
+    pageInfo.setText(`Page ${this.currentPage} of ${this.totalPages}`);
+    const footerEl = this.modalEl.querySelector(".search-results-footer");
+    if (footerEl) {
+      const paginationInfo = footerEl.querySelector(".pagination-info");
+      if (paginationInfo) {
+        const start = (this.currentPage - 1) * this.resultsPerPage + 1;
+        const end = Math.min(this.currentPage * this.resultsPerPage, this.hadithCount);
+        paginationInfo.setText(`${start}-${end} of ${this.hadithCount} Search Results`);
+      }
+    }
+    prevButton.disabled = this.currentPage === 1;
+    nextButton.disabled = this.currentPage === this.totalPages || this.totalPages === 0;
+  }
+  changePage(newPage) {
+    if (newPage >= 1 && newPage <= this.totalPages) {
+      this.currentPage = newPage;
+      this.performSearch(this.lastSearchSection);  // 👈 Refetch with new page
+    }
+  }
+
+  async performSearch(section) {
+    var _a, _b, _c;
+
+    this.lastSearchSection = section; 
+
+    const query = this.inputEl.value;
+    if (query.length < 3) {
+      new import_obsidian.Notice("Please enter at least 3 characters to search");
+      return;
+    }
+    try {
+      new import_obsidian.Notice("Searching...");
+      
+      console.log("API Performing online translation search...");
+
+      // Language lookup map
+      const languageMap = {
+        1: "فارسی",
+        2: "عربی",
+        3: "English",
+        4: "Akan",
+        5: "Albanian",
+        6: "Amharic",
+        7: "Abkhaz",
+        8: "Aragonese",
+        9: "Armenian",
+        10: "Assamese",
+        11: "Avaric",
+        12: "Avestan",
+        13: "Aymara",
+        14: "Azerbaijani",
+        15: "Bambara",
+        16: "Bashkir",
+        17: "Basque",
+        18: "Belarusian",
+        19: "Bengali",
+        20: "Bihari",
+        21: "Bislama",
+        22: "Bosnian",
+        23: "Breton",
+        24: "Bulgarian",
+        25: "Burmese",
+        26: "Catalan; Valencian",
+        27: "Chamorro",
+        28: "Chechen",
+        29: "Chichewa; Chewa; Nyanja",
+        30: "Chinese",
+        31: "Chuvash",
+        32: "Cornish",
+        33: "Corsican",
+        34: "Cree",
+        35: "Croatian",
+        36: "Czech",
+        37: "Danish",
+        38: "Divehi; Dhivehi; Maldivian;",
+        39: "Dutch",
+        40: "Dzongkha",
+        41: "Afar",
+        42: "Esperanto",
+        43: "Estonian",
+        44: "Ewe",
+        45: "Faroese",
+        46: "Fijian",
+        47: "Finnish",
+        48: "French",
+        49: "Fula; Fulah; Pulaar; Pular",
+        50: "Galician",
+        51: "Georgian",
+        52: "German",
+        53: "Greek, Modern",
+        54: "Guaraní",
+        55: "Gujarati",
+        56: "Haitian; Haitian Creole",
+        57: "Hausa",
+        58: "Hebrew (modern)",
+        59: "Herero",
+        60: "Hindi",
+        61: "Hiri Motu",
+        62: "Hungarian",
+        63: "Interlingua",
+        64: "Indonesian",
+        65: "Interlingue",
+        66: "Irish",
+        67: "Igbo",
+        68: "Inupiaq",
+        69: "Ido",
+        70: "Icelandic",
+        71: "Italian",
+        72: "Inuktitut",
+        73: "Japanese",
+        74: "Javanese",
+        75: "Kalaallisut, Greenlandic",
+        76: "Kannada",
+        77: "Kanuri",
+        78: "Kashmiri",
+        79: "Kazakh",
+        80: "Khmer",
+        81: "Kikuyu, Gikuyu",
+        82: "Kinyarwanda",
+        83: "Kirghiz, Kyrgyz",
+        84: "Komi",
+        85: "Kongo",
+        86: "Korean",
+        87: "Kurdish",
+        88: "Kwanyama, Kuanyama",
+        89: "Latin",
+        90: "Luxembourgish, Letzeburgesch",
+        91: "Luganda",
+        92: "Limburgish, Limburgan, Limburger",
+        93: "Lingala",
+        94: "Lao",
+        95: "Lithuanian",
+        96: "Luba-Katanga",
+        97: "Latvian",
+        98: "Manx",
+        99: "Macedonian",
+        100: "Malagasy",
+        101: "Malay",
+        102: "Malayalam",
+        103: "Maltese",
+        104: "Māori",
+        105: "Marathi",
+        106: "Marshallese",
+        107: "Mongolian",
+        108: "Nauru",
+        109: "Navajo, Navaho",
+        110: "Norwegian Bokmål",
+        111: "North Ndebele",
+        112: "Nepali",
+        113: "Ndonga",
+        114: "Norwegian Nynorsk",
+        115: "Norwegian",
+        116: "Nuosu",
+        117: "South Ndebele",
+        118: "Occitan (after 1500)",
+        119: "Ojibwa",
+        120: "Old Church Slavonic, Church Slavic, Church Slavonic, Old Bulgarian, Old Slavonic",
+        121: "Oromo",
+        122: "Oriya",
+        123: "Ossetian, Ossetic",
+        124: "Panjabi, Punjabi",
+        125: "Pāli",
+        126: "Afrikaans",
+        127: "Polish",
+        128: "Pashto, Pushto",
+        129: "Portuguese",
+        130: "Quechua",
+        131: "Romansh",
+        132: "Kirundi",
+        133: "Romanian, Moldavian, Moldovan",
+        134: "Russian",
+        135: "Sanskrit",
+        136: "Sardinian",
+        137: "Sindhi",
+        138: "Northern Sami",
+        139: "Samoan",
+        140: "Sango",
+        141: "Serbian",
+        142: "Scottish Gaelic; Gaelic",
+        143: "Shona",
+        144: "Sinhala, Sinhalese",
+        145: "Slovak",
+        146: "Slovene",
+        147: "Somali",
+        148: "Southern Sotho",
+        149: "Spanish; Castilian",
+        150: "Sundanese",
+        151: "Swahili",
+        152: "Swati",
+        153: "Swedish",
+        154: "Tamil",
+        155: "Telugu",
+        156: "Tajik",
+        157: "Thai",
+        158: "Tigrinya",
+        159: "Tibetan Standard, Tibetan, Central",
+        160: "Turkmen",
+        161: "Tagalog",
+        162: "Tswana",
+        163: "Tonga (Tonga Islands)",
+        164: "Turkish",
+        165: "Tsonga",
+        166: "Tatar",
+        167: "Twi",
+        168: "Tahitian",
+        169: "Uighur, Uyghur",
+        170: "Ukrainian",
+        171: "Urdu",
+        172: "Uzbek",
+        173: "Venda",
+        174: "Vietnamese",
+        175: "Volapük",
+        176: "Walloon",
+        177: "Welsh",
+        178: "Wolof",
+        179: "Western Frisian",
+        180: "Xhosa",
+        181: "Yiddish",
+        182: "Yoruba",
+        183: "Zhuang, Chuang",
+        184: "Zulu",
+        185: "سایر"
+      };
+
+      // Helper function to get language title
+      const getLanguageTitle = (languageId) => {
+        return languageMap[languageId] || "Unknown";
+      };
+
+      console.log("API Performing hadith search...");
+
+      // Step 1: Search for hadiths
+      const searchResponse = await fetch('https://hadith.inoor.ir/service/api/elastic/v2/ElasticHadithList', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'authorization': 'Bearer null',
+          'content-type': 'application/json',
+          'devicetype': 'web'
+        },
+        body: JSON.stringify({
+          text: query,
+          pageNumber: this.currentPage,
+          pageSize: this.resultsPerPage,
+          searchType: "and",
+          inFeild: "all",
+          searchIn: section,
+          isErab: true
+        })
+      }).then((res) => res.json()).catch((error) => ({ code: 500, error: error.message }));
+
+      // After the search response
+      if (!searchResponse.data?.resultList || searchResponse.data.hadithCount === 0) {
+        console.error('No hadiths found');
+        new import_obsidian.Notice("No matches found");
+        this.searchResults = [];
+        this.totalPages = 0;  // 👈 Reset total pages
+        this.updatePaginationDisplay();
+        return;
+      }
+
+      // 👇 Extract total count from API response (check actual API response structure)
+      this.hadithCount = searchResponse.data?.hadithCount || 0;
+      this.totalPages = Math.ceil(this.hadithCount / this.resultsPerPage);
+
+      console.log(`Found ${this.totalPages} totalPages.`);
+
+      // Extract hadith IDs
+      const hadithIds = searchResponse.data?.resultList?.map(item => item.id) || [];
+      console.log(`Found ${hadithIds.length} hadiths. Fetching details...`);
+
+      // Step 2: Fetch details for each hadith
+      const hadithDetailsResponses = await Promise.all(
+        hadithIds.map(id => 
+          fetch('https://hadith.inoor.ir/service/api/elastic/ElasticHadithById', {
+            method: 'POST',
+            headers: {
+              'accept': 'application/json',
+              'authorization': 'Bearer null',
+              'content-type': 'application/json',
+              'devicetype': 'web'
+            },
+            body: JSON.stringify({
+              hadithId: [id],
+              searchPhrase: ""
+            })
+          }).then((res) => res.json()).catch((error) => ({ isSuccess: false, error: error.message, hadithId: id }))
+        )
+      );
+
+      // Step 3: Process each hadith detail and fetch translations if needed
+      const processedHadiths = await Promise.all(
+        hadithDetailsResponses.map(async (detailResponse) => {
+          // Check if response is successful
+          if (!detailResponse.isSuccess || !detailResponse.data || detailResponse.data.length === 0) {
+            return {
+              success: false,
+              error: 'Failed to fetch hadith details',
+              response: detailResponse
+            };
+          }
+
+          const hadithData = detailResponse.data[0];
+          
+          // Extract required fields
+          const hadithInfo = {
+            isSuccess: detailResponse.isSuccess,
+            sourceId: hadithData.sourceId,
+            startIndexInPage: hadithData.startIndexInPage,
+            hadithId: hadithData.hadithId,
+            hasTranslate: hadithData.hasTranslate,
+            text: hadithData.text,
+            noorLibLink: hadithData.noorLibLink,
+            authorTitle: hadithData.authorTitle,
+            qaelTitleList: hadithData.qaelTitleList,
+            bookTitle: hadithData.bookTitle,
+            pageNum: hadithData.pageNum,
+            translations: []
+          };
+
+          // If hasTranslate is true, fetch translations
+          if (hadithData.hasTranslate) {
+            const translationResponse = await fetch('https://hadith.inoor.ir/service/api/elastic/ElasticHadithById', {
+              method: 'POST',
+              headers: {
+                'accept': 'application/json',
+                'authorization': 'Bearer null',
+                'content-type': 'application/json',
+                'devicetype': 'web'
+              },
+              body: JSON.stringify({
+                hadithId: [hadithData.hadithId],
+                searchPhrase: "",
+                searchIn: "translate"
+              })
+            }).then((res) => res.json()).catch((error) => ({ isSuccess: false, error: error.message }));
+
+            // Extract translation data if successful
+            if (translationResponse.isSuccess && translationResponse.data && translationResponse.data.length > 0) {
+              const translationData = translationResponse.data[0];
+              
+              hadithInfo.translations = (translationData.translateList || []).map(translation => ({
+                text: translation.text,
+                hadithId: translation.hadithId,
+                noorLibLink: translation.noorLibLink,
+                vol: translation.vol,
+                pageNum: translation.pageNum,
+                languageId: translation.languageId,
+                languageTitle: getLanguageTitle(translation.languageId), // Add language title
+                sourceMainTitle: translation.sourceMainTitle,
+                authorTitle: translation.authorTitle
+              }));
+            }
+          }
+
+          return hadithInfo;
+        })
+      );
+
+      // Results
+      console.log("Processing complete:", processedHadiths);
+
+      // After processing all hadiths
+      const successfulHadiths = processedHadiths.filter(h => h.isSuccess);
+
+      if (successfulHadiths.length === 0) {
+        console.error('No valid hadiths could be loaded');
+        new import_obsidian.Notice("No matches found");
+        this.searchResults = [];
+        this.updatePaginationDisplay();
+        return;
+      }
+
+      // Then iterate only over successful hadiths
+      successfulHadiths.forEach((hadith, index) => {
+        console.log(`\n=== Hadith ${index + 1} ===`);
+        console.log(`ID: ${hadith.hadithId}`);
+        console.log(`Book: ${hadith.bookTitle}`);
+        console.log(`Author: ${hadith.authorTitle}`);
+        console.log(`Page: ${hadith.pageNum}`);
+        console.log(`Link: ${hadith.noorLibLink}`);
+
+        if (hadith.translations.length > 0) {
+          console.log(`\nTranslations (${hadith.translations.length}):`);
+          hadith.translations.forEach((translation, tIndex) => {
+            console.log(`  ${tIndex + 1}. ${translation.languageTitle} (ID: ${translation.languageId})`);
+            console.log(`     Source: ${translation.sourceMainTitle}`);
+            console.log(`     Page: ${translation.pageNum}, Vol: ${translation.vol}`);
+            console.log(`     Link: ${translation.noorLibLink}`);
+
+          });
+        } else {
+          console.log('No translations available');
+        }
+      });
+      
+      
+      this.searchResults = successfulHadiths;
+
+      this.refreshSuggestions();
+     
+      this.updatePaginationDisplay();
+      new import_obsidian.Notice(`Found ${this.hadithCount} matches (showing page ${this.currentPage})`);
+    } catch (error) {
+      new import_obsidian.Notice("Error searching: " + error.message);
+      console.error("Search error:", error);
+    }
+    this.refreshSuggestions();
+  }
+  getSuggestions(query) {
+    if (!query) {
+      this.searchResults = [];
+      this.suggestions = [];
+      
+      this.currentPage = 1;
+      return [];
+    }
+    const startIdx = (this.currentPage - 1) * this.resultsPerPage;
+    const endIdx = Math.min(startIdx + this.resultsPerPage, this.searchResults.length);
+    return this.searchResults.slice(startIdx, endIdx);
+  }
+  renderSuggestion(match, el) {
+    el.addClass("suggestion-item");
+    const titleEl = el.createEl("div", { cls: "suggestion-title" });
+    const surahEl = titleEl.createSpan({ cls: "surah-reference" });
+    surahEl.setText(match.bookTitle);
+    const verseRef = titleEl.createSpan({ cls: "verse-reference" });
+    verseRef.setText(` ${match.pageNum}`);
+    
+    // Render Arabic text if available
+    if (match.text) {
+      const arabicEl = el.createEl("div", { cls: "quran-arabic" });
+      arabicEl.style.marginTop = "10px";
+      arabicEl.innerHTML = this.highlightSearchMatches(match.text, this.inputEl.value);
+    }
+    
+    // Render translations
+    if (match.translations && match.translations.length > 0) {
+      match.translations.forEach((translation, index) => {
+        const translationContainer = el.createEl("div", { cls: "translation-container" });
+        translationContainer.style.marginTop = index === 0 ? "10px" : "8px";
+        
+        // Language label
+        const languageLabel = translationContainer.createEl("div", { cls: "translation-language" });
+        languageLabel.setText(translation.languageTitle);
+        languageLabel.style.fontWeight = "bold";
+        languageLabel.style.fontSize = "0.9em";
+        languageLabel.style.color = "var(--text-muted)";
+        
+        // Translation text
+        const textEl = translationContainer.createEl("div", { cls: "suggestion-text" });
+        textEl.innerHTML = this.highlightSearchMatches(translation.text, this.inputEl.value);
+        
+        // Translation source info (optional)
+        if (translation.sourceMainTitle) {
+          const sourceEl = translationContainer.createEl("div", { cls: "translation-source" });
+          sourceEl.style.fontSize = "0.8em";
+          sourceEl.style.color = "var(--text-faint)";
+          sourceEl.setText(`${translation.sourceMainTitle} - Vol ${translation.vol}, p.${translation.pageNum}`);
+        }
+      });
+    } else {
+      const noTranslationEl = el.createEl("div", { cls: "suggestion-text" });
+      noTranslationEl.style.fontStyle = "italic";
+      noTranslationEl.style.color = "var(--text-muted)";
+      noTranslationEl.setText("No translations available");
+    }
+    
+    el.addEventListener("mouseover", () => {
+      const items = this.resultContainerEl.querySelectorAll(".suggestion-item");
+      const index = Array.from(items).indexOf(el);
+      if (index >= 0) {
+        this.setSelectedItem(index, true);
+      }
+    });
+  }
+  highlightSearchMatches(text, query) {
+    if (!query)
+      return text;
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escapedQuery})`, "gi");
+    return text.replace(regex, '<span style="color: #60a5fa; font-weight: bold;">$1</span>');
+  }
+  refreshSuggestions() {
+    const query = this.inputEl.value.trim();
+    if (!query) {
+      this.searchResults = [];
+      this.suggestions = [];
+      this.currentPage = 1;
+      super.updateSuggestions();
+      return;
+    }
+    this.suggestions = this.getSuggestions(query);
+    super.updateSuggestions();
+  }
+  setSelectedItem(index, scrollIntoView = false) {
+    const items = this.resultContainerEl.querySelectorAll(".suggestion-item");
+    items.forEach((item) => item.classList.remove("is-selected"));
+    if (index >= 0 && index < items.length) {
+      const selectedItem = items[index];
+      selectedItem.classList.add("is-selected");
+      if (scrollIntoView) {
+        selectedItem.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }
+  async onChooseSuggestion(match, evt) {
+    const verseContent = await this.plugin.renderNoor(match);
+    this.editor.replaceSelection(verseContent);
+  }
+};
+
 var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
   constructor(app, plugin, editor) {
     super(app);
@@ -2799,12 +3434,6 @@ var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
     this.currentPage = 1;
     this.resultsPerPage = 10;
     this.totalPages = 1;
-    this.fetchedBook= /* @__PURE__ */ new Set();
-    this.fetchedChapter= /* @__PURE__ */ new Set();
-    this.fetchedAuthor= /* @__PURE__ */ new Set();
-    this.fetchedTranslator= /* @__PURE__ */ new Set();
-    this.fetchedArabic= /* @__PURE__ */ new Set();
-    this.fetchedEnglish= /* @__PURE__ */ new Set();
     this.plugin = plugin;
     this.editor = editor;
     this.setPlaceholder("Enter text to search for in the Arabic or Translation...");
@@ -2941,12 +3570,6 @@ var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
     }
     try {
       new import_obsidian.Notice("Searching...");
-      this.fetchedBook.clear();
-      this.fetchedChapter.clear();
-      this.fetchedAuthor.clear();
-      this.fetchedTranslator.clear();
-      this.fetchedArabic.clear();
-      this.fetchedEnglish.clear();
       
       console.log("API Performing online translation search...");
       const results = await Promise.all([
@@ -2977,12 +3600,6 @@ var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
         if (((_a2 = result.data) == null ? void 0 : _a2.code) === 200) {
           result.match.arabicText = result.match.text;
           result.match.text = result.data.data.text;
-          this.fetchedArabic.add(result.arabicText);
-          this.fetchedEnglish.add(result.englishText);
-          this.fetchedBook.add(result.book);
-          this.fetchedChapter.add(result.chapter);
-          this.fetchedAuthor.add(result.author);
-          this.fetchedTranslator.add(result.translator);
           console.log(`fetched result okay`);
         } else if (result.error) {
           console.error(`Error fetching `);
@@ -3003,12 +3620,6 @@ var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
     if (!query) {
       this.searchResults = [];
       this.suggestions = [];
-      this.fetchedBook.clear();
-      this.fetchedChapter.clear();
-      this.fetchedAuthor.clear();
-      this.fetchedTranslator.clear();
-      this.fetchedArabic.clear();
-      this.fetchedEnglish.clear();
       
       this.currentPage = 1;
       return [];
@@ -3029,7 +3640,7 @@ var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
     if (match.arabicText) {
       const arabicEl = el.createEl("div", { cls: "quran-arabic" });
       arabicEl.style.marginTop = "10px";
-      arabicEl.innerHTML = this.plugin.settings.searchArabicEdition ? this.highlightSearchMatches(match.arabicText, this.inputEl.value) : match.arabicText;
+      arabicEl.innerHTML = this.highlightSearchMatches(match.arabicText, this.inputEl.value);
     }
     el.addEventListener("mouseover", () => {
       const items = this.resultContainerEl.querySelectorAll(".suggestion-item");
@@ -3051,12 +3662,6 @@ var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
     if (!query) {
       this.searchResults = [];
       this.suggestions = [];
-      this.fetchedBook.clear();
-      this.fetchedChapter.clear();
-      this.fetchedAuthor.clear();
-      this.fetchedTranslator.clear();
-      this.fetchedArabic.clear();
-      this.fetchedEnglish.clear();
       this.currentPage = 1;
       super.updateSuggestions();
       return;
@@ -3139,6 +3744,13 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
         new ThaqalaynSearchModal(this.app, this, editor).open();
       }
     });
+    this.addCommand({
+      id: "search-noor",
+      name: "Search Noor",
+      editorCallback: (editor, view) => {
+        new NoorSearchModal(this.app, this, editor).open();
+      }
+    });
     this.addSettingTab(new IslamicTextLookupSettingTab(this.app, this));
     this.updateStyles();
   }
@@ -3173,7 +3785,7 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
     
     return filePath;
   }
-  async createThaqalaynNote(noteName, content) {
+  async createHadithNote(noteName, content) {
     const folderPath = "Hadith";
     const filePath = `${folderPath}/${noteName}.md`;
     
@@ -3311,7 +3923,68 @@ var IslamicTextLookupPlugin = class extends import_obsidian.Plugin {
 
     if (this.settings.autoCreateNotes) {
       const noteName = `${bookName} ${chapterID} ${hID}`;
-      await this.createThaqalaynNote(noteName, createNoteResult);
+      await this.createHadithNote(noteName, createNoteResult);
+    }
+
+    return result;
+  }
+  async renderNoor(match) {
+    let result = "";
+    let createNoteResult = "";
+
+    const arText = this.applyArabicStyle(match.text, this.settings.arabicStyleIndex);
+    const bookName = match.bookTitle;
+    const author = match.authorTitle;
+    const hadithId = match.hadithId;
+    const pageNum = match.pageNum;
+    const url = match.noorLibLink;
+    const qaelTitle = match.qaelTitleList || "";
+
+    const verseHeader = `[[${bookName} ${hadithId}#User Notes|Hadith ${hadithId} - ${bookName}]]`;
+
+    const calloutType = this.settings.calloutType || "tip";
+    result += "> [!" + calloutType + "]+ " + verseHeader + "\n";
+    result += "> " + arText + "\n";
+    
+    /*// Add all translations
+    if (match.translations && match.translations.length > 0) {
+      match.translations.forEach((translation) => {
+        const translationText = this.handleParens(translation.text, this.settings.removeParens);
+        result += "> \n> **" + translation.languageTitle + "**: " + translationText + "\n";
+      });
+    } else {
+      result += "> \n> *No translations available*\n";
+    }*/
+    
+    result += ">";
+
+    // Create note content
+    createNoteResult += `# ${bookName}\n## Hadith #${hadithId}\n\n`;
+    if (qaelTitle) {
+      createNoteResult += `**Narrator**: ${qaelTitle}\n\n`;
+    }
+    createNoteResult += `**Author**: ${author}\n`;
+    createNoteResult += `**Page**: ${pageNum}\n\n`;
+    createNoteResult += `### Arabic Text\n\n${match.text}\n\n`;
+    
+    // Add all translations to note
+    if (match.translations && match.translations.length > 0) {
+      createNoteResult += `### Translations\n\n`;
+      match.translations.forEach((translation) => {
+        createNoteResult += `#### ${translation.languageTitle}\n\n`;
+        createNoteResult += `${translation.text}\n\n`;
+        if (translation.sourceMainTitle) {
+          createNoteResult += `*Source: ${translation.sourceMainTitle}, Vol ${translation.vol}, Page ${translation.pageNum}*\n\n`;
+        }
+        createNoteResult += `[Translation Link](${translation.noorLibLink})\n\n`;
+      });
+    }
+    
+    createNoteResult += `[Original Source](${url})\n\n### User Notes\n\n`;
+
+    if (this.settings.autoCreateNotes) {
+      const noteName = `${bookName} ${hadithId}`;
+      await this.createHadithNote(noteName, createNoteResult);
     }
 
     return result;
