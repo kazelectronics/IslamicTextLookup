@@ -2899,7 +2899,7 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
     }
   }
   updateSearchCount(countEl) {
-    const count = this.searchResults.length;
+    const count = this.hadithCount;
     countEl.setText(`${count} Search Results`);
   }
   updatePaginationDisplay() {
@@ -2925,7 +2925,7 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
       }
     }
     prevButton.disabled = this.currentPage === 1;
-    nextButton.disabled = this.currentPage === this.totalPages || this.totalPages === 0;
+    nextButton.disabled = this.currentPage === this.totalPages || this.totalPages === 1;
   }
   changePage(newPage) {
     if (newPage >= 1 && newPage <= this.totalPages) {
@@ -2947,7 +2947,7 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
     try {
       new import_obsidian.Notice("Searching...");
       
-      console.log("API Performing online translation search...");
+      console.log(`API Performing online translation search of page ${this.currentPage}...`);
 
       // Language lookup map
       const languageMap = {
@@ -3170,7 +3170,7 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
         console.error('No hadiths found');
         new import_obsidian.Notice("No matches found");
         this.searchResults = [];
-        this.totalPages = 0;  // 👈 Reset total pages
+        this.totalPages = 1;  // 👈 Reset total pages
         this.updatePaginationDisplay();
         return;
       }
@@ -3178,6 +3178,10 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
       // 👇 Extract total count from API response (check actual API response structure)
       this.hadithCount = searchResponse.data?.hadithCount || 0;
       this.totalPages = Math.ceil(this.hadithCount / this.resultsPerPage);
+
+      if (this.totalPages == 0) {
+        this.totalPages = 1;
+      }
 
       console.log(`Found ${this.totalPages} totalPages.`);
 
@@ -3331,9 +3335,7 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
       this.currentPage = 1;
       return [];
     }
-    const startIdx = (this.currentPage - 1) * this.resultsPerPage;
-    const endIdx = Math.min(startIdx + this.resultsPerPage, this.searchResults.length);
-    return this.searchResults.slice(startIdx, endIdx);
+    return this.searchResults;
   }
   renderSuggestion(match, el) {
     el.addClass("suggestion-item");
