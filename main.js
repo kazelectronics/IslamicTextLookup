@@ -3530,12 +3530,7 @@ var ThaqalaynSearchModal = class extends import_obsidian.SuggestModal {
   changePage(newPage) {
     if (newPage >= 1 && newPage <= this.totalPages) {
       this.currentPage = newPage;
-      this.updatePaginationDisplay();
-      if (!this.plugin.settings.searchArabicEdition) {
-        this.fetchArabicVersesForCurrentPage();
-      } else {
-        this.fetchTranslationVersesForCurrentPage();
-      }
+      this.performSearch();
     }
   }
   async performSearch() {
