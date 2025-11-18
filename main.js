@@ -3190,109 +3190,87 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
       console.log(`Found ${hadithIds.length} hadiths. Fetching details...`);
 
       // Step 2: Fetch details for each hadith
-      const hadithDetailsResponses = await Promise.all(
-        hadithIds.map(id => 
-          fetch('https://hadith.inoor.ir/service/api/elastic/ElasticHadithById', {
-            method: 'POST',
-            headers: {
-              'accept': 'application/json',
-              'authorization': 'Bearer null',
-              'content-type': 'application/json',
-              'devicetype': 'web'
-            },
-            body: JSON.stringify({
-              hadithId: [id],
-              searchPhrase: ""
-            })
-          }).then((res) => res.json()).catch((error) => ({ isSuccess: false, error: error.message, hadithId: id }))
-        )
-      );
-
-      // Step 3: Process each hadith detail and fetch translations if needed
-      const processedHadiths = await Promise.all(
-        hadithDetailsResponses.map(async (detailResponse) => {
-          // Check if response is successful
-          if (!detailResponse.isSuccess || !detailResponse.data || detailResponse.data.length === 0) {
-            return {
-              success: false,
-              error: 'Failed to fetch hadith details',
-              response: detailResponse
-            };
-          }
-
-          const hadithData = detailResponse.data[0];
-          
-          // Extract required fields
-          const hadithInfo = {
-            isSuccess: detailResponse.isSuccess,
-            sourceId: hadithData.sourceId,
-            startIndexInPage: hadithData.startIndexInPage,
-            hadithId: hadithData.hadithId,
-            hasTranslate: hadithData.hasTranslate,
-            text: hadithData.text,
-            noorLibLink: hadithData.noorLibLink,
-            authorTitle: hadithData.authorTitle,
-            qaelTitleList: hadithData.qaelTitleList,
-            bookTitle: hadithData.bookTitle,
-            pageNum: hadithData.pageNum,
-            translations: []
-          };
-
-          // If hasTranslate is true, fetch translations
-          if (hadithData.hasTranslate) {
-            const translationResponse = await fetch('https://hadith.inoor.ir/service/api/elastic/ElasticHadithById', {
-              method: 'POST',
-              headers: {
-                'accept': 'application/json',
-                'authorization': 'Bearer null',
-                'content-type': 'application/json',
-                'devicetype': 'web'
-              },
-              body: JSON.stringify({
-                hadithId: [hadithData.hadithId],
-                searchPhrase: "",
-                searchIn: "translate"
-              })
-            }).then((res) => res.json()).catch((error) => ({ isSuccess: false, error: error.message }));
-
-            // Extract translation data if successful
-            if (translationResponse.isSuccess && translationResponse.data && translationResponse.data.length > 0) {
-              const translationData = translationResponse.data[0];
-              
-              hadithInfo.translations = (translationData.translateList || []).map(translation => ({
-                text: translation.text,
-                hadithId: translation.hadithId,
-                noorLibLink: translation.noorLibLink,
-                vol: translation.vol,
-                pageNum: translation.pageNum,
-                languageId: translation.languageId,
-                languageTitle: getLanguageTitle(translation.languageId), // Add language title
-                sourceMainTitle: translation.sourceMainTitle,
-                authorTitle: translation.authorTitle
-              }));
-            }
-          }
-
-          return hadithInfo;
+      const hadithDetailsResponse = await fetch('https://hadith.inoor.ir/service/api/elastic/ElasticHadithById', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'authorization': 'Bearer null',
+          'content-type': 'application/json',
+          'devicetype': 'web'
+        },
+        body: JSON.stringify({
+          hadithId: hadithIds, // 👈 Pass ALL IDs at once
+          searchPhrase: ""
         })
-      );
+      }).then((res) => res.json()).catch((error) => ({ isSuccess: false, error: error.message }));
 
-      // Results
-      console.log("Processing complete:", processedHadiths);
-
-      // After processing all hadiths
-      const successfulHadiths = processedHadiths.filter(h => h.isSuccess);
-
-      if (successfulHadiths.length === 0) {
-        console.error('No valid hadiths could be loaded');
-        new import_obsidian.Notice("No matches found");
+      if (!hadithDetailsResponse.isSuccess || !hadithDetailsResponse.data) {
+        console.error('Failed to fetch hadith details');
+        new import_obsidian.Notice("Error loading results");
         this.searchResults = [];
         this.updatePaginationDisplay();
         return;
       }
 
-      // Then iterate only over successful hadiths
-      successfulHadiths.forEach((hadith, index) => {
+      // Step 3: Process each hadith detail and fetch translations if needed
+      const translationResponse = await fetch('https://hadith.inoor.ir/service/api/elastic/ElasticHadithById', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'authorization': 'Bearer null',
+          'content-type': 'application/json',
+          'devicetype': 'web'
+        },
+        body: JSON.stringify({
+          hadithId: hadithIds, // 👈 Pass ALL IDs at once
+          searchPhrase: "",
+          searchIn: "translate"
+        })
+      }).then((res) => res.json()).catch((error) => ({ isSuccess: false, error: error.message }));
+
+      // 🔥 Step 4: Map translations by hadithId for quick lookup
+      const translationsMap = {};
+      if (translationResponse.isSuccess && translationResponse.data) {
+        translationResponse.data.forEach(translationData => {
+          if (translationData.translateList) {
+            translationsMap[translationData.hadithId] = translationData.translateList.map(translation => ({
+              text: translation.text,
+              hadithId: translation.hadithId,
+              noorLibLink: translation.noorLibLink,
+              vol: translation.vol,
+              pageNum: translation.pageNum,
+              languageId: translation.languageId,
+              languageTitle: getLanguageTitle(translation.languageId),
+              sourceMainTitle: translation.sourceMainTitle,
+              authorTitle: translation.authorTitle
+            }));
+          }
+        });
+      }
+
+      // 🔥 Step 5: Process all hadiths with their translations
+      const processedHadiths = hadithDetailsResponse.data.map(hadithData => {
+        return {
+          isSuccess: true,
+          sourceId: hadithData.sourceId,
+          startIndexInPage: hadithData.startIndexInPage,
+          hadithId: hadithData.hadithId,
+          hasTranslate: hadithData.hasTranslate,
+          text: hadithData.text,
+          noorLibLink: hadithData.noorLibLink,
+          authorTitle: hadithData.authorTitle,
+          qaelTitleList: hadithData.qaelTitleList,
+          bookTitle: hadithData.bookTitle,
+          pageNum: hadithData.pageNum,
+          translations: translationsMap[hadithData.hadithId] || []
+        };
+      });
+
+      // Results
+      console.log("Processing complete:", processedHadiths);
+
+      // Log results
+      processedHadiths.forEach((hadith, index) => {
         console.log(`\n=== Hadith ${index + 1} ===`);
         console.log(`ID: ${hadith.hadithId}`);
         console.log(`Book: ${hadith.bookTitle}`);
@@ -3307,20 +3285,17 @@ var NoorSearchModal = class extends import_obsidian.SuggestModal {
             console.log(`     Source: ${translation.sourceMainTitle}`);
             console.log(`     Page: ${translation.pageNum}, Vol: ${translation.vol}`);
             console.log(`     Link: ${translation.noorLibLink}`);
-
           });
         } else {
           console.log('No translations available');
         }
       });
       
-      
-      this.searchResults = successfulHadiths;
-
+      this.searchResults = processedHadiths;
       this.refreshSuggestions();
-     
       this.updatePaginationDisplay();
       new import_obsidian.Notice(`Found ${this.hadithCount} matches (showing page ${this.currentPage})`);
+      
     } catch (error) {
       new import_obsidian.Notice("Error searching: " + error.message);
       console.error("Search error:", error);
